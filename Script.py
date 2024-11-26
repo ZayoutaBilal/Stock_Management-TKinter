@@ -358,11 +358,38 @@ def switch_to_products_list_frame(src):
                            command=lambda: delete_selected_product(table, src))
     delete_button.pack(pady=5)
 
-    update_button = Button(products_list_frame, text="Update Selected", width=15, bg="blue", fg="white")
-    update_button.pack(pady=5)
-
     show_frame(products_list_frame)
     show_products(table, src)
+
+
+
+def switch_to_orders_list_frame(src):
+    orders_list_frame = Frame(root, padx=20, pady=20)
+    orders_list_frame.config(bg="#fffcd1")
+    orders_list_frame.pack(fill="both", expand=True)
+    Label(orders_list_frame, text="Order Information", font=("Arial", 16), bg="#fffcd1").pack(pady=10)
+    columns = ("Id", "Total_Amount", "Quantity", "Product","Client")
+    table = ttk.Treeview(orders_list_frame, columns=columns, show="headings", height=10)
+    table.pack(fill="both", expand=True)
+
+    table.heading("Id", text="Id")
+    table.heading("Total_Amount", text="Total_Amount")
+    table.heading("Quantity", text="Quantity")
+    table.heading("Product", text="Product")
+    table.heading("Client", text="Client")
+
+    table.column("Id", width=80, anchor="center")
+    table.column("Total_Amount", width=150, anchor="center")
+    table.column("Quantity", width=100, anchor="center")
+    table.column("Product", width=120, anchor="center")
+    table.column("Client", width=100, anchor="center")
+
+    delete_button = Button(orders_list_frame, text="Delete Selected", width=15, bg="red", fg="white",
+                           command=lambda: delete_selected_order(table, src))
+    delete_button.pack(pady=5)
+
+    show_frame(orders_list_frame)
+    show_orders(table, src)
 
 
 
@@ -598,9 +625,14 @@ show_product_menu = Menu(product_menu, tearoff=0)
 show_product_menu.add_command(label="Show XML", command=lambda: switch_to_products_list_frame("xml"))
 show_product_menu.add_command(label="Show DB", command=lambda: switch_to_products_list_frame("db"))
 
+show_order_menu = Menu(order_menu, tearoff=0)
+show_order_menu.add_command(label="Show XML", command=lambda: switch_to_orders_list_frame("xml"))
+show_order_menu.add_command(label="Show DB", command=lambda: switch_to_orders_list_frame("db"))
+
 client_menu.add_cascade(label="Show", menu=show_client_menu)
 product_menu.add_cascade(label="Show", menu=show_product_menu)
 supplier_menu.add_cascade(label="Show", menu=show_supplier_menu)
+order_menu.add_cascade(label="Show", menu=show_order_menu)
 
 menu_bar.add_cascade(label="Client", menu=client_menu)
 menu_bar.add_cascade(label="Supplier", menu=supplier_menu)
@@ -674,6 +706,35 @@ def show_products(table, src):
             table.insert("", "end", values=row)
         connection.close()
 
+
+
+def show_orders(table, src):
+
+    for row in table.get_children():
+        table.delete(row)
+
+    if src == "xml":
+        if os.path.exists(XML_FILE):
+            tree = ET.parse(XML_FILE)
+            r = tree.getroot()
+            orders = r.find("Orders")
+            if orders is not None:
+                for order in orders.findall("Order"):
+                    table.insert("", "end", values=(
+                        order.get("order_id"),
+                        order.find("Total_Amount").text,
+                        order.find("Quantity").text,
+                        order.find("product_id").text,
+                        order.find("client_id").text,
+
+                    ))
+    elif src == "db":
+        connection = sqlite3.connect(DB_FILE)
+        cursor = connection.cursor()
+        cursor.execute("SELECT order_id, Total_Amount, quantity, product_id, client_id FROM orders")
+        for row in cursor.fetchall():
+            table.insert("", "end", values=row)
+        connection.close()
 
 def show_clients(table,src):
     for row in table.get_children():
@@ -809,6 +870,40 @@ def delete_selected_product(table,src):
         messagebox.showwarning("No Selection", "Please select a product to delete.")
 
 
+
+def delete_selected_order(table,src):
+    selected_item = table.selection()
+    if selected_item:
+        confirm = messagebox.askyesno("Delete", "Are you sure you want to delete the selected Order?")
+        if confirm:
+            item_values = table.item(selected_item, "values")
+            order_id = item_values[0]
+            if src == "xml":
+                try:
+                    tree = ET.parse(XML_FILE)
+                    r = tree.getroot()
+                    orders = r.find("Orders")
+                    for order in orders.findall("Order"):
+                        if order.get("order_id") == str(order_id):
+                            orders.remove(order)
+                            break
+
+                    tree.write(XML_FILE, encoding="utf-8", xml_declaration=True)
+                    table.delete(selected_item)
+                    messagebox.showinfo("Success", "Order deleted successfully!")
+                except Exception as e:
+                    messagebox.showerror("Error", f"Failed to delete Order: {e}")
+            elif src == "db":
+                connection = sqlite3.connect(DB_FILE)
+                cursor = connection.cursor()
+                cursor.execute("delete FROM orders where order_id=?", order_id)
+                table.delete(selected_item)
+                connection.commit()
+                connection.close()
+                messagebox.showinfo("Success", "Order deleted successfully!")
+
+    else:
+        messagebox.showwarning("No Selection", "Please select a order to delete.")
 
 
 
@@ -973,7 +1068,7 @@ def clear_fields():
     address_entry.delete(0, END)
 
 
-root.title("Gestion Stock")
+root.title("Stock management")
 root.config(bg="#fffcd1")
 root.geometry("800x500")
 root.mainloop()
